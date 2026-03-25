@@ -46,7 +46,7 @@ python scrape.py "https://www.YOUR_WEBSITE.com/" --json-out my_FILENAME.json
 ### Optional Arguments
 
 - `url` — The starting URL to scrape (default: Udaipur hotels).
-- `--json-out` — Output JSON file (default: hotel_images_by_name.json).
+- `--json-out` — Output JSON file (default: FILE_NAME.json).
 - `--max-hotels` — Maximum number of hotels to process (default: all).
 
 ## Output
