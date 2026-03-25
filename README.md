@@ -31,7 +31,7 @@ This project provides a Python script to scrape YOUR_WEBSITE names and their ass
 
 ## Usage
 
-Run the scraper with the default YOUR_WEBSITE Udaipur hotels URL:
+Run the scraper with the default YOUR_WEBSITE URL:
 
 ```bash
 python scrape.py
@@ -45,9 +45,9 @@ python scrape.py "https://www.YOUR_WEBSITE.com/" --json-out my_FILENAME.json
 
 ### Optional Arguments
 
-- `url` — The starting URL to scrape (default: Udaipur hotels).
+- `url` — The starting URL to scrape (default: YOUR_WEBSITE_NAME).
 - `--json-out` — Output JSON file (default: FILE_NAME.json).
-- `--max-hotels` — Maximum number of hotels to process (default: all).
+- `--max-value` — Maximum number to process (default: all).
 
 ## Output
 
