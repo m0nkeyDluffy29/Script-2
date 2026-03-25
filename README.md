@@ -1,6 +1,6 @@
 # Image Scraper
 
-This project provides a Python script to scrape hotel names and their associated images from the  listings page. The script uses Playwright for browser automation and outputs a JSON file mapping hotel names to lists of image URLs.
+This project provides a Python script to scrape YOUR_WEBSITE names and their associated images from the  listings page. The script uses Playwright for browser automation and outputs a JSON file mapping hotel names to lists of image URLs.
 
 ## Features
 
@@ -40,7 +40,7 @@ python scrape.py
 Or specify a different URL and output file:
 
 ```bash
-python scrape.py "https://www.YOUR_WEBSITE.com/" --json-out my_hotels.json
+python scrape.py "https://www.YOUR_WEBSITE.com/" --json-out my_FILENAME.json
 ```
 
 ### Optional Arguments
@@ -51,11 +51,11 @@ python scrape.py "https://www.YOUR_WEBSITE.com/" --json-out my_hotels.json
 
 ## Output
 
-The script generates a JSON file mapping hotel names to lists of image URLs, e.g.:
+The script generates a JSON file mapping names to lists of image URLs, e.g.:
 
 ```json
 {
-  "Hotel XYZ": [
+  "XYZ": [
     "https://.../image1.jpg",
     "https://.../image2.jpg"
   ],
@@ -65,7 +65,7 @@ The script generates a JSON file mapping hotel names to lists of image URLs, e.g
 
 ## Notes
 
-- The script is tailored for the YOUR_WEBSITE hotel listing structure and may require adjustments if the website layout changes.
+- The script is tailored for the YOUR_WEBSITE listing structure and may require adjustments if the website layout changes.
 - For large scrapes, ensure a stable internet connection and sufficient system resources.
 
 ## License
