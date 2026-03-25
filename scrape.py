@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import csv
 import json
 import re
 import urllib.request
@@ -15,10 +14,10 @@ from playwright.async_api import async_playwright
 START_URL = "https://www.adanione.com/hotels/srp?city=Udaipur"
 HOTEL_CARD_SELECTOR = "a.flx.cp.full.card-box.hotel-card.mr-b20.anim"
 IMAGE_SELECTOR = ".img-container-web img.img-card"
+SHOW_MORE_SELECTOR = "span.show-more.btn.anim.round.btn-004"
+SHOW_MORE_BATCH_SIZE = 50
 DEFAULT_TIMEOUT_MS = 30000
 OUTPUT_JSON = "hotel_images_by_name.json"
-OUTPUT_CSV = "hotel_images_by_name.csv"
-OUTPUT_IMAGE_DIR = "images"
 DETAIL_FETCH_RETRIES = 3
 BROWSER_CANDIDATES = [
     {
@@ -95,6 +94,81 @@ async def snapshot_hotel_cards(page):
     )
 
 
+def dedupe_preserve_order(values):
+    deduped = []
+    seen = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
+def hotel_identity(card):
+    href = (card.get("href") or "").strip().lower()
+    if href:
+        return f"href:{href}"
+    fallback_name = (card.get("name") or "").strip().lower()
+    return f"name:{fallback_name}"
+
+
+async def click_show_more(page, previous_count, timeout_ms=15000):
+    button = page.locator(SHOW_MORE_SELECTOR).first
+
+    # Some pages render/show this control only after scrolling to the listing bottom.
+    # Try a short scroll probe first so we do not stop early at exactly 50 items.
+    found_button = False
+    for _ in range(10):
+        try:
+            if await button.is_visible(timeout=500):
+                found_button = True
+                break
+        except PlaywrightError:
+            pass
+
+        await page.mouse.wheel(0, 2800)
+        await page.wait_for_timeout(350)
+
+    if not found_button:
+        return False
+
+    try:
+        await button.scroll_into_view_if_needed(timeout=5000)
+    except PlaywrightError:
+        pass
+
+    await page.wait_for_timeout(250)
+    try:
+        await button.click(timeout=7000)
+    except PlaywrightError:
+        # Some sites attach click handlers to parent nodes; this is a safe fallback.
+        await page.evaluate(
+            "(selector) => document.querySelector(selector)?.click()",
+            SHOW_MORE_SELECTOR,
+        )
+
+    deadline = asyncio.get_running_loop().time() + (timeout_ms / 1000)
+    while asyncio.get_running_loop().time() < deadline:
+        current_count = await page.locator(HOTEL_CARD_SELECTOR).count()
+        if current_count > previous_count:
+            return True
+
+        try:
+            still_visible = await page.locator(SHOW_MORE_SELECTOR).first.is_visible(
+                timeout=250
+            )
+        except PlaywrightError:
+            still_visible = False
+
+        if not still_visible and current_count <= previous_count:
+            return False
+
+        await page.wait_for_timeout(350)
+
+    return await page.locator(HOTEL_CARD_SELECTOR).count() > previous_count
+
+
 async def wait_for_detail_content(page, listing_url, timeout_ms=12000):
     deadline = asyncio.get_running_loop().time() + (timeout_ms / 1000)
 
@@ -129,13 +203,7 @@ async def collect_image_urls(page):
         """
     )
 
-    deduped = []
-    seen = set()
-    for image in images:
-        if image not in seen:
-            seen.add(image)
-            deduped.append(image)
-    return deduped
+    return dedupe_preserve_order(images)
 
 
 async def return_to_listing(page, listing_url):
@@ -211,7 +279,7 @@ async def collect_hotel_images_from_click(page, index, retries=DETAIL_FETCH_RETR
             await popup.wait_for_load_state(
                 "domcontentloaded", timeout=DEFAULT_TIMEOUT_MS
             )
-            await popup.wait_for_selector(IMAGE_SELECTOR, timeout=8000)
+            await popup.wait_for_selector(IMAGE_SELECTOR, timeout=80000)
             await popup.wait_for_timeout(1200)
             return await collect_image_urls(popup)
         except (PlaywrightTimeoutError, PlaywrightError) as error:
@@ -244,44 +312,85 @@ async def scrape_hotels(url, max_hotels=None):
                 await page.wait_for_selector(
                     HOTEL_CARD_SELECTOR, timeout=DEFAULT_TIMEOUT_MS
                 )
-                total_cards = await auto_scroll_to_load_all(page)
-                print(f"Detected {total_cards} hotel cards on the listing page.")
+                initial_cards = await auto_scroll_to_load_all(page)
+                print(f"Detected {initial_cards} initially loaded hotel cards.")
+
+                grouped_images = {}
+                processed_identities = set()
+                processed_count = 0
 
                 cards = await snapshot_hotel_cards(page)
-                grouped_images = {}
 
-                if max_hotels is not None:
-                    cards = cards[:max_hotels]
+                while True:
+                    while processed_count < len(cards):
+                        if max_hotels is not None and processed_count >= max_hotels:
+                            await browser.close()
+                            return grouped_images
 
-                for card in cards:
-                    hotel_name = card["name"]
-                    index = card["index"]
-                    href = card.get("href")
-                    print(f"Processing {index + 1}/{len(cards)}: {hotel_name}")
+                        card = cards[processed_count]
+                        hotel_name = card["name"]
+                        index = card["index"]
+                        href = card.get("href")
 
-                    if not href:
-                        print(f"Skipping {hotel_name}: missing hotel detail URL.")
-                        continue
-
-                    try:
-                        grouped_images[hotel_name] = await collect_hotel_images_from_click(
-                            page, index
-                        )
-                    except PlaywrightError as error:
-                        print(
-                            f"Click flow failed for {hotel_name}, retrying via href ({error})"
-                        )
-                        try:
-                            grouped_images[hotel_name] = await collect_hotel_images(context, href)
-                        except PlaywrightError as fallback_error:
+                        identity = hotel_identity(card)
+                        if identity in processed_identities:
                             print(
-                                f"Skipping {hotel_name}: detail page failed ({fallback_error})"
+                                f"Skipping duplicate listing at index {index + 1}: {hotel_name}"
                             )
+                            processed_count += 1
                             continue
 
-                    print(
-                        f"Collected {len(grouped_images[hotel_name])} images for {hotel_name}."
-                    )
+                        processed_identities.add(identity)
+                        print(
+                            f"Processing {processed_count + 1}/{len(cards)} loaded: {hotel_name}"
+                        )
+
+                        if not href:
+                            print(f"Skipping {hotel_name}: missing hotel detail URL.")
+                            processed_count += 1
+                            continue
+
+                        image_urls = []
+                        try:
+                            image_urls = await collect_hotel_images_from_click(page, index)
+                        except PlaywrightError as error:
+                            print(
+                                f"Click flow failed for {hotel_name}, retrying via href ({error})"
+                            )
+                            try:
+                                image_urls = await collect_hotel_images(context, href)
+                            except PlaywrightError as fallback_error:
+                                print(
+                                    f"Skipping {hotel_name}: detail page failed ({fallback_error})"
+                                )
+                                processed_count += 1
+                                continue
+
+                        existing = grouped_images.get(hotel_name, [])
+                        grouped_images[hotel_name] = dedupe_preserve_order(
+                            existing + image_urls
+                        )
+                        print(
+                            f"Collected {len(grouped_images[hotel_name])} images for {hotel_name}."
+                        )
+                        processed_count += 1
+
+                        if processed_count % SHOW_MORE_BATCH_SIZE == 0:
+                            previous_count = len(cards)
+                            expanded = await click_show_more(page, previous_count)
+                            if expanded:
+                                cards = await snapshot_hotel_cards(page)
+                                print(
+                                    f"Loaded more hotels: {previous_count} -> {len(cards)}"
+                                )
+
+                    previous_count = len(cards)
+                    expanded = await click_show_more(page, previous_count)
+                    if not expanded:
+                        break
+
+                    cards = await snapshot_hotel_cards(page)
+                    print(f"Loaded more hotels: {previous_count} -> {len(cards)}")
 
                 await browser.close()
                 return grouped_images
@@ -297,18 +406,6 @@ async def scrape_hotels(url, max_hotels=None):
 
 def write_json_output(grouped_images, destination):
     destination.write_text(json.dumps(grouped_images, indent=2), encoding="utf-8")
-
-
-def write_csv_output(grouped_images, destination):
-    with destination.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["hotel_name", "image_url"])
-        for hotel_name, image_urls in grouped_images.items():
-            if not image_urls:
-                writer.writerow([hotel_name, ""])
-                continue
-            for image_url in image_urls:
-                writer.writerow([hotel_name, image_url])
 
 
 def sanitize_path_segment(value):
@@ -372,13 +469,6 @@ def parse_args():
     )
     parser.add_argument("url", nargs="?", default=START_URL)
     parser.add_argument("--json-out", default=OUTPUT_JSON)
-    parser.add_argument("--csv-out", default=OUTPUT_CSV)
-    parser.add_argument("--images-dir", default=OUTPUT_IMAGE_DIR)
-    parser.add_argument(
-        "--skip-image-download",
-        action="store_true",
-        help="Only save JSON/CSV outputs, skip downloading image files.",
-    )
     parser.add_argument(
         "--max-hotels",
         type=int,
@@ -397,20 +487,6 @@ if __name__ == "__main__":
     results = asyncio.run(scrape_hotels(args.url, max_hotels=args.max_hotels))
 
     json_path = Path(args.json_out)
-    csv_path = Path(args.csv_out)
     write_json_output(results, json_path)
-    write_csv_output(results, csv_path)
 
     print(f"Saved JSON output to {json_path}")
-    print(f"Saved CSV output to {csv_path}")
-
-    if not args.skip_image_download:
-        images_dir = Path(args.images_dir)
-        summary = asyncio.run(write_image_files(results, images_dir))
-        print(f"Saved image files under {images_dir}")
-        print(
-            "Download summary: "
-            f"downloaded={summary['downloaded']}, "
-            f"skipped={summary['skipped']}, "
-            f"failed={summary['failed']}"
-        )
