@@ -11,13 +11,13 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 
-START_URL = "https://www.adanione.com/hotels/srp?city=Udaipur"
-HOTEL_CARD_SELECTOR = "a.flx.cp.full.card-box.hotel-card.mr-b20.anim"
-IMAGE_SELECTOR = ".img-container-web img.img-card"
-SHOW_MORE_SELECTOR = "span.show-more.btn.anim.round.btn-004"
+START_URL = "https://www.YOUR_WEBSITE.com/"
+HOTEL_CARD_SELECTOR = "IF_THERE_IS_A_CARD BEFORE IMAGES"
+IMAGE_SELECTOR = "CLASS_OF_IMAGE"
+SHOW_MORE_SELECTOR = ""
 SHOW_MORE_BATCH_SIZE = 50
 DEFAULT_TIMEOUT_MS = 30000
-OUTPUT_JSON = "hotel_images_by_name.json"
+OUTPUT_JSON = "FILE_NAME.json"
 DETAIL_FETCH_RETRIES = 3
 BROWSER_CANDIDATES = [
     {
@@ -465,7 +465,7 @@ async def write_image_files(grouped_images, images_root):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Scrape Adani One hotel images grouped by hotel name."
+        description="Scrape YOUR_WEBSITE images grouped by NAME_OF_FOLDER"
     )
     parser.add_argument("url", nargs="?", default=START_URL)
     parser.add_argument("--json-out", default=OUTPUT_JSON)
