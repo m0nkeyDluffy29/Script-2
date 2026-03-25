@@ -1,10 +1,10 @@
-# AdaniOne Hotel Image Scraper
+# Image Scraper
 
-This project provides a Python script to scrape hotel names and their associated images from the AdaniOne Udaipur hotel listings page. The script uses Playwright for browser automation and outputs a JSON file mapping hotel names to lists of image URLs.
+This project provides a Python script to scrape hotel names and their associated images from the  listings page. The script uses Playwright for browser automation and outputs a JSON file mapping hotel names to lists of image URLs.
 
 ## Features
 
-- Scrapes hotel names and detail page links from the AdaniOne Udaipur hotels listing.
+- Scrapes hotel names and detail page links from the YOUR_WEBSITE.
 - Visits each hotel detail page to collect all available image URLs.
 - Outputs results as a JSON file, grouping images by hotel name.
 - Handles dynamic loading and pagination ("Show More" button).
@@ -31,7 +31,7 @@ This project provides a Python script to scrape hotel names and their associated
 
 ## Usage
 
-Run the scraper with the default AdaniOne Udaipur hotels URL:
+Run the scraper with the default YOUR_WEBSITE Udaipur hotels URL:
 
 ```bash
 python scrape.py
@@ -40,7 +40,7 @@ python scrape.py
 Or specify a different URL and output file:
 
 ```bash
-python scrape.py "https://www.adanione.com/hotels/srp?city=Udaipur" --json-out my_hotels.json
+python scrape.py "https://www.YOUR_WEBSITE.com/" --json-out my_hotels.json
 ```
 
 ### Optional Arguments
@@ -65,7 +65,7 @@ The script generates a JSON file mapping hotel names to lists of image URLs, e.g
 
 ## Notes
 
-- The script is tailored for the AdaniOne hotel listing structure and may require adjustments if the website layout changes.
+- The script is tailored for the YOUR_WEBSITE hotel listing structure and may require adjustments if the website layout changes.
 - For large scrapes, ensure a stable internet connection and sufficient system resources.
 
 ## License
